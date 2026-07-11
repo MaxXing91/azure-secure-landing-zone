@@ -6,7 +6,7 @@ The idea was simple: instead of spinning up resources one at a time and worrying
 
 Author: Max Xing
 Region: East US
-Status: In progress - identity, governance, networking, and storage are done. compute and monitoring are next.
+Status: Core build complete - identity, governance, networking, and storage are all done and secured. Compute is designed and documented below (not deployed, for reasons I explain there), and monitoring is the last thing left.
 
 -- The main idea: Least Privilege
 Only ever grant the minimum access needed, and deny everything else by default. I tried to apply that same principle at every layer:
@@ -64,13 +64,21 @@ Private container - I created a data container with no anonymous access.
 
 Network isolation - This is the part I'm most happy with. I restricted the storage account's network access to my VNet using a service endpoint, which means it's no longer reachable from the public internet at all, only from inside my network. Even if someone got hold of the storage keys, they couldn't use them from outside.
 
--- Whats Next --
-Compute - Deploy a Linux VM in the web subnet and a Windows VM in the app subnet, drop them behind the NSGs and into the ASGs I already set up, and wire up the managed identity for storage access.
+-- Compute and Managed Identity (designed, not deployed) --
 
-Monitoring & protection - Turn on Azure Monitor, Microsoft Defender for Cloud, and backup/alerting to round out the environment.
+The last piece of the build would be a virtual machine dropped into the web subnet, joined to the asg-web group, and sitting behind the NSG I already set up. The interesting part isn't the VM itself, it's how it would talk to storage.
+
+Instead of using storage account keys (which are basically a shared password that can leak and is a pain to rotate), I'd give the VM a system-assigned managed identity and grant that identity the Storage Blob Data Reader role, scoped only to my storage account. That way the VM can read blobs using nothing but its own Azure identity. No keys, no secrets stored anywhere. This is the piece that finishes the whole security story I was going for: the storage is locked to my network, and now the only thing allowed to touch it does so through an identity with the minimum access it needs.
+
+I designed all of this out but didn't actually deploy it, and the reason is worth writing down because it's a real thing you run into. My Azure for Students subscription has a VM core quota of zero across every VM family I tried, and student subscriptions can't request a quota increase without upgrading to a paid Pay-as-You-Go account. I didn't want to give up the student protections just to spin up one demo VM, so I made the call to document the design instead of forcing the deployment. Honestly that felt like the more realistic decision anyway. In a real job you don't always control the environment you're handed, and part of the work is adapting your design to the limits that already exist instead of fighting them.
+
+-- Whats Next --
+Monitoring & protection - Turn on Azure Monitor, Microsoft Defender for Cloud, and backup/alerting to round out the environment. This is the last thing left to make the landing zone feel complete.
 
 -- Takeaways --
 Again, this project is built on the idea of least privilege so the idea of only allowing whats needed ran from RBAC to NSGs to storage networking. This made the entire project more consistent as it hit the goal of being a secure landing zone.
 
 I also mentioned my own policy rejecting me. This helped me learn more about tuning policy parameters than reading about them in the Azure course. When I made them at first it still felt a little abstract but once I dug deeper to solve the issues, it felt more concrete. 
-This actually happened twice but the second time was a built in region-restriction policy above my subscription and I worked around it by depoloying my resources in East US, different from Canada Central where my resource group lives.
+This actually happened twice but the second time was a built in region-restriction policy above my subscription and I worked around it by deploying my resources in East US, different from Canada Central where my resource group lives.
+
+The last thing I took away was from the VM quota wall at the end. I spent a while trying to get a VM deployed before realizing the subscription just wasn't going to allow it, and instead of brute forcing my way around every option I stopped and documented the design and my reasoning. That ended up teaching me something the rest of the project didn't: knowing when to stop fighting a constraint and work within it, and it's probably closer to real cloud work than if everything had just worked the first time.
